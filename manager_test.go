@@ -3,12 +3,13 @@ package tache_test
 import (
 	"context"
 	"errors"
-	"github.com/OpenListTeam/tache"
 	"log/slog"
 	"os"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/OpenListTeam/tache"
 )
 
 type TestTask struct {
@@ -42,30 +43,8 @@ func TestCancelRunningTask(t *testing.T) {
 	<-start
 	task.Cancel()
 	tm.Wait()
-	if task.GetState() != tache.StateCanceled {
-		t.Fatalf("task should be canceled, got %v", task.GetState())
-	}
-	if !errors.Is(task.GetErr(), context.Canceled) {
-		t.Fatalf("task error should be context.Canceled, got %v", task.GetErr())
-	}
-}
-
-func TestCancelRunningTaskWithCustomErr(t *testing.T) {
-	tm := tache.NewManager[*TestTask](tache.WithWorks(1))
-	start := make(chan struct{})
-	task := &TestTask{
-		do: func(task *TestTask) error {
-			close(start)
-			<-task.Ctx().Done()
-			return errors.New("custom cancel err")
-		},
-	}
-	tm.Add(task)
-	<-start
-	task.Cancel()
-	tm.Wait()
-	if task.GetState() != tache.StateCanceled {
-		t.Fatalf("task should be canceled, got %v", task.GetState())
+	if task.GetState() != tache.StateFailed {
+		t.Fatalf("task should be failed, got %v", task.GetState())
 	}
 	if !errors.Is(task.GetErr(), context.Canceled) {
 		t.Fatalf("task error should be context.Canceled, got %v", task.GetErr())

@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"sync/atomic"
 
-	nanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/OpenListTeam/gsync"
+	nanoid "github.com/matoous/go-nanoid/v2"
 )
 
 // Manager is the manager of all tasks
@@ -73,15 +73,14 @@ func (m *Manager[T]) Add(task T) {
 	if _, maxRetry := task.GetRetry(); maxRetry == 0 {
 		task.SetRetry(0, m.opts.MaxRetry)
 	}
-	if sliceContains([]State{StateRunning}, task.GetState()) {
+	switch task.GetState() {
+	case StateRunning:
 		task.SetState(StatePending)
-	}
-	if sliceContains([]State{StateCanceling}, task.GetState()) {
+	case StateFailing:
+		task.SetState(StateFailed)
+	case StateCanceling:
 		task.SetState(StateCanceled)
 		task.SetErr(context.Canceled)
-	}
-	if task.GetState() == StateFailing {
-		task.SetState(StateFailed)
 	}
 	m.tasks.Store(task.GetID(), task)
 	if !sliceContains([]State{StateSucceeded, StateCanceled, StateErrored, StateFailed}, task.GetState()) {
@@ -116,7 +115,7 @@ func (m *Manager[T]) next() {
 			m.workers.Put(worker)
 			m.next()
 		}()
-		if task.GetState() == StateCanceling {
+		if isCanceled(task.Ctx()) {
 			task.SetState(StateCanceled)
 			task.SetErr(context.Canceled)
 			return

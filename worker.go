@@ -3,7 +3,6 @@ package tache
 import (
 	"container/list"
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -14,20 +13,24 @@ type Worker[T Task] struct {
 	ID int
 }
 
+func isCanceled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
 // Execute executes the task
 func (w Worker[T]) Execute(task T) {
 	onError := func(err error) {
-		ctxErr := task.Ctx().Err()
-		if errors.Is(err, context.Canceled) || errors.Is(ctxErr, context.Canceled) || task.GetState() == StateCanceling {
-			if ctxErr == nil {
-				ctxErr = context.Canceled
-			}
-			task.SetErr(ctxErr)
-			task.SetState(StateCanceled)
-			return
-		}
 		task.SetErr(err)
-		task.SetState(StateErrored)
+		if isCanceled(task.Ctx()) {
+			task.SetState(StateCanceled)
+		} else {
+			task.SetState(StateErrored)
+		}
 		if !needRetry(task) {
 			if hook, ok := Task(task).(OnFailed); ok {
 				task.SetState(StateFailing)
@@ -57,12 +60,6 @@ func (w Worker[T]) Execute(task T) {
 			err := task.Run()
 			if err != nil {
 				onError(err)
-				return
-			}
-
-			if errors.Is(task.Ctx().Err(), context.Canceled) || task.GetState() == StateCanceling {
-				task.SetErr(context.Canceled)
-				task.SetState(StateCanceled)
 				return
 			}
 

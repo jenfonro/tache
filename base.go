@@ -76,14 +76,9 @@ func (b *Base) Cancel() {
 	switch b.State {
 	case StateSucceeded, StateCanceled, StateFailed:
 		return
-	case StateCanceling:
-		if b.cancel != nil {
-			b.cancel()
-		}
-		return
 	}
-	b.SetState(StateCanceling)
-	if b.cancel != nil {
+	if !isCanceled(b.ctx) {
+		b.SetState(StateCanceling)
 		b.cancel()
 	}
 }
