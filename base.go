@@ -73,8 +73,19 @@ func (b *Base) SetRetry(retry int, maxRetry int) {
 }
 
 func (b *Base) Cancel() {
+	switch b.State {
+	case StateSucceeded, StateCanceled, StateFailed:
+		return
+	case StateCanceling:
+		if b.cancel != nil {
+			b.cancel()
+		}
+		return
+	}
 	b.SetState(StateCanceling)
-	b.cancel()
+	if b.cancel != nil {
+		b.cancel()
+	}
 }
 
 func (b *Base) Ctx() context.Context {

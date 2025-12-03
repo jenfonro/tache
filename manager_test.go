@@ -1,6 +1,8 @@
 package tache_test
 
 import (
+	"context"
+	"errors"
 	"github.com/OpenListTeam/tache"
 	"log/slog"
 	"os"
@@ -24,6 +26,70 @@ func TestManager_Add(t *testing.T) {
 	task := &TestTask{}
 	tm.Add(task)
 	t.Logf("%+v", task)
+}
+
+func TestCancelRunningTask(t *testing.T) {
+	tm := tache.NewManager[*TestTask](tache.WithWorks(1))
+	start := make(chan struct{})
+	task := &TestTask{
+		do: func(task *TestTask) error {
+			close(start)
+			<-task.Ctx().Done()
+			return task.Ctx().Err()
+		},
+	}
+	tm.Add(task)
+	<-start
+	task.Cancel()
+	tm.Wait()
+	if task.GetState() != tache.StateCanceled {
+		t.Fatalf("task should be canceled, got %v", task.GetState())
+	}
+	if !errors.Is(task.GetErr(), context.Canceled) {
+		t.Fatalf("task error should be context.Canceled, got %v", task.GetErr())
+	}
+}
+
+func TestCancelRunningTaskWithCustomErr(t *testing.T) {
+	tm := tache.NewManager[*TestTask](tache.WithWorks(1))
+	start := make(chan struct{})
+	task := &TestTask{
+		do: func(task *TestTask) error {
+			close(start)
+			<-task.Ctx().Done()
+			return errors.New("custom cancel err")
+		},
+	}
+	tm.Add(task)
+	<-start
+	task.Cancel()
+	tm.Wait()
+	if task.GetState() != tache.StateCanceled {
+		t.Fatalf("task should be canceled, got %v", task.GetState())
+	}
+	if !errors.Is(task.GetErr(), context.Canceled) {
+		t.Fatalf("task error should be context.Canceled, got %v", task.GetErr())
+	}
+}
+
+func TestCancelFinishedTask(t *testing.T) {
+	tm := tache.NewManager[*TestTask]()
+	task := &TestTask{
+		do: func(task *TestTask) error {
+			return nil
+		},
+	}
+	tm.Add(task)
+	tm.Wait()
+
+	if task.GetState() != tache.StateSucceeded {
+		t.Fatalf("task should be succeeded before cancel, got %v", task.GetState())
+	}
+
+	task.Cancel()
+	if task.GetState() != tache.StateSucceeded {
+		t.Fatalf("cancel should not change finished task state, got %v", task.GetState())
+	}
 }
 
 func TestWithRetry(t *testing.T) {
